@@ -1,0 +1,24 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: ocp-ai-pipeline-run-
+spec:
+  pipelineRef:
+    name: ocp-ai-pipeline-ci
+  serviceAccountName: pipeline-runner
+  params:
+    - name: git-url
+      value: "https://github.com/jmcconne10/ocp_ai_pipeline.git"
+    - name: git-revision
+      value: "main"
+    - name: num-gpus
+      value: "0"  # Set to 1 on clusters with NVIDIA GPU nodes
+  workspaces:
+    - name: shared-workspace
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi

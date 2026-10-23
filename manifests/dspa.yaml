@@ -1,0 +1,19 @@
+apiVersion: datasciencepipelinesapplications.opendatahub.io/v1
+kind: DataSciencePipelinesApplication
+metadata:
+  name: dspa
+spec:
+  dspVersion: v2
+  objectStorage:
+    minio:
+      deploy: true
+      image: 'quay.io/opendatahub/minio:RELEASE.2019-08-14T20-37-41Z-license-compliance'
+      pvcSize: 5Gi
+      s3CredentialsSecret:
+        accessKey: accesskey
+        secretKey: secretkey
+        secretName: pipeline-s3-secret
+  database:
+    mariaDB:
+      deploy: true
+      pvcSize: 5Gi

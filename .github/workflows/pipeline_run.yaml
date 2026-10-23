@@ -1,0 +1,51 @@
+name: OpenShift AI Pipeline CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      num_gpus:
+        description: 'Number of GPUs to request'
+        required: true
+        default: '0'
+
+jobs:
+  compile-and-submit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r pipeline/requirements.txt
+
+      - name: Compile Pipeline
+        run: |
+          python pipeline/pipeline.py --output pipeline.yaml
+
+      - name: Install OpenShift CLI (oc)
+        uses: redhat-actions/openshift-tools-installer@v1
+        with:
+          oc: "latest"
+
+      - name: Submit Pipeline to OpenShift AI
+        env:
+          OCP_TOKEN: ${{ secrets.OPENSHIFT_TOKEN }}
+          DSPA_HOST: ${{ secrets.DSPA_ROUTE_URL }}
+          NUM_GPUS: ${{ github.event.inputs.num_gpus || '0' }}
+          VERIFY_SSL: "True"
+        run: |
+          python pipeline/submit_pipeline.py \
+            --pipeline-file pipeline.yaml \
+            --num-gpus "${NUM_GPUS}"

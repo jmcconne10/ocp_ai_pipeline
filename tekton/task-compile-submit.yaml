@@ -1,0 +1,48 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: kfp-compile-and-submit
+spec:
+  description: "Compiles a KFP v2 pipeline and submits it to OpenShift AI DSPA in-cluster"
+  params:
+    - name: dspa-host
+      type: string
+      description: "DSPA in-cluster service or route URL (e.g. http://ds-pipeline-dspa:8888 or route)"
+      default: "http://ds-pipeline-dspa:8888"
+    - name: num-gpus
+      type: string
+      description: "Number of GPUs to request for the workload (0 for CPU fallback)"
+      default: "0"
+  workspaces:
+    - name: source
+      description: "Workspace containing the cloned pipeline git repository"
+  steps:
+    - name: compile-and-submit
+      image: registry.access.redhat.com/ubi9/python-39:latest
+      workingDir: $(workspaces.source.path)
+      env:
+        - name: DSPA_HOST
+          value: $(params.dspa-host)
+        - name: NUM_GPUS
+          value: $(params.num-gpus)
+        - name: VERIFY_SSL
+          value: "False"
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+        
+        echo "=== Installing Pipeline Dependencies ==="
+        pip install --no-cache-dir -r pipeline/requirements.txt
+        
+        echo "=== In-Cluster Authentication ==="
+        # In Tekton, the ServiceAccount token is mounted in-pod
+        export OCP_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+        
+        echo "=== Compiling Pipeline ==="
+        python pipeline/pipeline.py --output /tmp/pipeline.yaml
+        
+        echo "=== Submitting Pipeline to OpenShift AI ==="
+        python pipeline/submit_pipeline.py \
+          --pipeline-file /tmp/pipeline.yaml \
+          --num-gpus "${NUM_GPUS}" \
+          --insecure
