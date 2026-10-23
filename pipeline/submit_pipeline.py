@@ -114,7 +114,33 @@ def main():
             verify_ssl=verify_ssl
         )
         
-        # Ensure experiment exists
+        # 1. Register or update the pipeline template in OpenShift AI catalog
+        pipeline_id = None
+        try:
+            print("Registering pipeline template in OpenShift AI UI catalog...")
+            p = client.upload_pipeline(
+                pipeline_package_path=str(pipeline_path),
+                pipeline_name="ocp-gpu-hello-world"
+            )
+            pipeline_id = p.pipeline_id
+            print(f"✅ Pipeline template registered: {pipeline_id}")
+        except Exception:
+            try:
+                pipeline_id = client.get_pipeline_id(name="ocp-gpu-hello-world")
+                if pipeline_id:
+                    import time
+                    version_name = f"v-{int(time.time())}"
+                    client.upload_pipeline_version(
+                        pipeline_package_path=str(pipeline_path),
+                        pipeline_version_name=version_name,
+                        pipeline_id=pipeline_id
+                    )
+                    print(f"✅ Uploaded new pipeline version '{version_name}' to catalog.")
+            except Exception as upload_err:
+                # Non-fatal if upload version fails; run can still execute
+                pass
+
+        # 2. Ensure experiment exists
         try:
             experiment = client.create_experiment(name=args.experiment_name)
             experiment_id = experiment.experiment_id
