@@ -90,37 +90,38 @@ def main():
     run_cmd(["oc", "delete", "pipelineruns", "--all", "-n", namespace, "--ignore-not-found"])
     print("  [OK] Tekton resources removed.")
 
-    # 4. Delete Workload Pods
-    print_header("3. Cleaning Up Workload Pods")
-    run_cmd(["oc", "delete", "pods", "-l", "pipelines.kubeflow.org/v2_component=true", "-n", namespace, "--ignore-not-found"])
+    # 4. Delete Deployments, Services, Secrets & NetworkPolicies FIRST (before PVCs)
+    print_header("3. Deleting Deployments, Services & Secrets")
+    run_cmd(["oc", "delete", "deployment", "minio", "-n", namespace, "--now", "--ignore-not-found"])
+    run_cmd(["oc", "delete", "svc", "minio", "-n", namespace, "--ignore-not-found"])
+    run_cmd(["oc", "delete", "secret", "pipeline-s3-secret", "-n", namespace, "--ignore-not-found"])
+    run_cmd(["oc", "delete", "networkpolicy", "allow-from-redhat-ods-app-to-minio", "-n", namespace, "--ignore-not-found"])
+    print("  [OK] Deployments, services, and secrets removed.")
+
+    # 5. Delete Workload & Lingering Pods
+    print_header("4. Cleaning Up Workload Pods")
+    run_cmd(["oc", "delete", "pods", "-l", "pipelines.kubeflow.org/v2_component=true", "-n", namespace, "--now", "--ignore-not-found"])
+    run_cmd(["oc", "delete", "pods", "-l", "app=minio", "-n", namespace, "--now", "--ignore-not-found"])
     
-    # Also delete any leftover ocp-gpu-hello-world pods
+    # Also delete any leftover ocp pods
     try:
         pods_res = run_cmd(["oc", "get", "pods", "-n", namespace, "-o", "jsonpath={.items[*].metadata.name}"])
         pod_names = pods_res.stdout.split()
         for p in pod_names:
-            if p.startswith("ocp-gpu-hello-world"):
+            if p.startswith("ocp-") or p.startswith("minio-"):
                 print(f"  Deleting pod: {p}")
                 run_cmd(["oc", "delete", "pod", p, "-n", namespace, "--now", "--ignore-not-found"])
     except Exception:
         pass
-    print("  [OK] Workload pods cleaned up.")
+    print("  [OK] Pods cleaned up.")
 
-    # 5. Delete PersistentVolumeClaims (PVCs)
-    print_header("4. Deleting Storage Claims (PVCs)")
+    # 6. Delete PersistentVolumeClaims (PVCs) AFTER pods are gone
+    print_header("5. Deleting Storage Claims (PVCs)")
     pvcs_to_delete = ["mariadb-dspa", "minio-dspa", "minio-pvc"]
     for pvc in pvcs_to_delete:
         print(f"Deleting PVC '{pvc}'...")
-        run_cmd(["oc", "delete", "pvc", pvc, "-n", namespace, "--ignore-not-found"])
+        run_cmd(["oc", "delete", "pvc", pvc, "-n", namespace, "--timeout=15s", "--ignore-not-found"])
     print("  [OK] PVCs deleted.")
-
-    # 6. Delete Secrets & NetworkPolicies
-    print_header("5. Deleting Secrets & NetworkPolicies")
-    run_cmd(["oc", "delete", "secret", "pipeline-s3-secret", "-n", namespace, "--ignore-not-found"])
-    run_cmd(["oc", "delete", "networkpolicy", "allow-from-redhat-ods-app-to-minio", "-n", namespace, "--ignore-not-found"])
-    run_cmd(["oc", "delete", "deployment", "minio", "-n", namespace, "--ignore-not-found"])
-    run_cmd(["oc", "delete", "svc", "minio", "-n", namespace, "--ignore-not-found"])
-    print("  [OK] Secrets, deployments, and network policies deleted.")
 
     # 7. Local File Cleanup
     print_header("6. Cleaning Up Local Files")
@@ -131,6 +132,10 @@ def main():
     if Path("pipeline.yaml").exists():
         os.remove("pipeline.yaml")
         print("  [OK] Removed compiled pipeline.yaml")
+
+    if Path("artifacts").exists():
+        shutil.rmtree("artifacts")
+        print("  [OK] Removed local artifacts directory.")
 
     clean_venv = input("\nAlso delete Python virtual environment (.venv)? [y/N]: ").strip().lower()
     in_active_venv = bool(os.environ.get("VIRTUAL_ENV"))

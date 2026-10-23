@@ -1,55 +1,59 @@
 import os
 import sys
-import time
+import json
 import torch
+from model import train_model, complete_word, build_vocab
 
 def main():
-    print("=" * 60)
-    print("OpenShift AI Pipeline Workload: PyTorch Device Discovery")
-    print("=" * 60)
-    print(f"Python Version: {sys.version.split()[0]}")
+    print("=" * 65)
+    print("OpenShift AI Pipeline: Character-Level Language Model (CharLSTM)")
+    print("=" * 65)
+    print(f"Python Version : {sys.version.split()[0]}")
     print(f"PyTorch Version: {torch.__version__}")
     
     cuda_available = torch.cuda.is_available()
-    print(f"CUDA Available: {cuda_available}")
+    device = "cuda" if cuda_available else "cpu"
+    print(f"Hardware Device: {device.upper()} (CUDA Available: {cuda_available})")
     
     if cuda_available:
-        device_count = torch.cuda.device_count()
-        print(f"Detected GPU Devices: {device_count}")
-        
-        for i in range(device_count):
-            props = torch.cuda.get_device_properties(i)
-            print(f"\n--- GPU {i}: {props.name} ---")
-            print(f"  Compute Capability : {props.major}.{props.minor}")
-            print(f"  Total Memory       : {props.total_memory / (1024 ** 2):.1f} MB")
-            print(f"  Multi-Processors   : {props.multi_processor_count}")
-        
-        device = torch.device("cuda:0")
-        print(f"\nRunning matrix multiplication test on device: {device}...")
-        start_time = time.time()
-        a = torch.randn(2048, 2048, device=device)
-        b = torch.randn(2048, 2048, device=device)
-        c = torch.matmul(a, b)
-        torch.cuda.synchronize()
-        elapsed = time.time() - start_time
-        
-        print(f"Tensor shape result: {c.shape}")
-        print(f"Computation completed in {elapsed * 1000:.2f} ms")
-        print("\n✅ GPU Workload executed successfully!")
-    else:
-        print("\n⚠️ No GPU detected or running in CPU-only fallback mode.")
-        device = torch.device("cpu")
-        print(f"Running fallback matrix multiplication test on {device}...")
-        start_time = time.time()
-        a = torch.randn(1024, 1024, device=device)
-        b = torch.randn(1024, 1024, device=device)
-        c = torch.matmul(a, b)
-        elapsed = time.time() - start_time
-        print(f"Tensor shape result: {c.shape}")
-        print(f"Computation completed in {elapsed * 1000:.2f} ms")
-        print("\n✅ CPU Fallback executed successfully!")
+        print(f"Device Name    : {torch.cuda.get_device_name(0)}")
+        print(f"Total Memory   : {torch.cuda.get_device_properties(0).total_memory / (1024**2):.1f} MB")
+    
+    print("\nTraining Character-Level Completion Model on domain vocabulary...")
+    model, char2idx, idx2char, final_loss, train_ms = train_model(
+        epochs=150,
+        lr=0.02,
+        device=device
+    )
+    
+    print(f"[SUCCESS] Training completed in {train_ms:.2f} ms")
+    print(f"[METRIC] Final Cross-Entropy Loss: {final_loss:.4f}")
+    print(f"[METRIC] Vocabulary Size: {len(char2idx)} characters")
+    
+    # Run test completions
+    test_prefixes = ["ope", "kube", "py", "con", "ten", "art", "mac"]
+    print("\n" + "-" * 40)
+    print("Testing Interactive Word Completions:")
+    print("-" * 40)
+    for prefix in test_prefixes:
+        completed = complete_word(model, char2idx, idx2char, prefix, device=device)
+        print(f"  Prefix: '{prefix:<5}' -> Predicted Completion: '{completed}'")
+    print("-" * 40)
 
-    print("=" * 60)
+    # Save artifacts locally
+    output_dir = os.environ.get("MODEL_OUTPUT_DIR", "./artifacts")
+    os.makedirs(output_dir, exist_ok=True)
+    
+    model_path = os.path.join(output_dir, "model.pt")
+    vocab_path = os.path.join(output_dir, "vocab.json")
+    
+    torch.save(model.state_dict(), model_path)
+    with open(vocab_path, "w") as f:
+        json.dump({"char2idx": char2idx, "idx2char": {str(k): v for k, v in idx2char.items()}}, f, indent=2)
+        
+    print(f"\n[ARTIFACT] Model weights saved to : {model_path}")
+    print(f"[ARTIFACT] Vocabulary saved to    : {vocab_path}")
+    print("=" * 65)
 
 if __name__ == "__main__":
     main()

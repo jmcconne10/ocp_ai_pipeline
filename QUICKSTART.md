@@ -68,6 +68,23 @@ Status Details: https://ds-pipeline-dspa.../#/runs/details/7ed4eea9-ec32-4e17-97
 
 ---
 
+## Test Model Inference Locally
+
+You can test character completions immediately in your terminal:
+
+```bash
+# Single completion
+python infer.py --prompt "ope"
+# Output: Predicted completion: 'openshift'
+
+# Interactive autocomplete prompt
+python infer.py --interactive
+```
+
+For full details, see the **[Model Usage Guide (MODEL_USAGE.md)](MODEL_USAGE.md)**.
+
+---
+
 ## Common Options
 
 ```bash

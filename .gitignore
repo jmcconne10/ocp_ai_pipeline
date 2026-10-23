@@ -29,6 +29,8 @@ wheels/
 # Kubeflow Pipeline compilation artifacts
 pipeline.yaml
 *.tar.gz
+artifacts/
+*.pt
 
 # IDE & OS files
 .vscode/*
