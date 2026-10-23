@@ -2,6 +2,9 @@
 
 A production-ready, reusable template for developing, compiling, and running **Kubeflow Pipelines (KFP v2)** on **Red Hat OpenShift AI (RHOAI)** directly from local IDEs and native OpenShift CI/CD (Tekton).
 
+> ⚡ **Looking to get up and running immediately?**  
+> Jump straight to the **[Quick Setup Guide (QUICKSTART.md)](QUICKSTART.md)** to configure your OpenShift environment and run your first pipeline in under 2 minutes with `python3 setup.py`.
+
 ---
 
 ## Architecture & Features
@@ -70,9 +73,30 @@ A production-ready, reusable template for developing, compiling, and running **K
 
 ---
 
-## Step 1: Cluster Setup & Reproducibility Guide
+## Quick Start (Automated Setup)
 
-Follow these steps to set up Data Science Pipelines in your OpenShift project (works in Red Hat Developer Sandbox, ROSA, or your company's private OpenShift cluster).
+To automatically configure your OpenShift cluster, deploy MinIO storage, provision the DSPA pipeline server, generate your `.env`, and compile the pipeline in one interactive step, run:
+
+```bash
+python3 setup.py
+```
+
+The script will prompt for:
+1. **OpenShift Token** (or reuse an active `oc` session)
+2. **Project / Namespace**
+3. **Storage preference** (In-Cluster MinIO vs External S3)
+4. Automatic `.env` generation and initial pipeline compilation!
+
+To completely clean up and reset your cluster and local state at any time:
+```bash
+python3 destroy.py
+```
+
+---
+
+## Manual Cluster Setup & Reproducibility Guide
+
+If you prefer to configure resources manually, follow the steps below:
 
 ### 1.1 Verify OpenShift AI Operator
 Ensure **Red Hat OpenShift AI** is installed by your cluster administrator. Verify in your terminal:
