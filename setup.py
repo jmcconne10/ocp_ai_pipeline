@@ -186,23 +186,40 @@ def wait_for_dspa_route(namespace: str) -> str:
     print_header("5. Waiting for DSPA Pipeline Server Route")
     print("Waiting for OpenShift AI to reconcile DSPA and create ingress route...")
     
-    route_cmd = [
-        "oc", "get", "route", "-l", "app.kubernetes.io/name=data-science-pipelines",
-        "-n", namespace,
-        "-o", 'jsonpath={"https://"}{.items[0].spec.host}'
-    ]
-    
     max_wait = 120
     start = time.time()
     while time.time() - start < max_wait:
+        # 1. Try direct route name 'ds-pipeline-dspa'
         try:
-            res = run_cmd(route_cmd)
+            res = run_cmd([
+                "oc", "get", "route", "ds-pipeline-dspa",
+                "-n", namespace,
+                "-o", 'jsonpath={"https://"}{.spec.host}'
+            ])
             route = res.stdout.strip()
-            if route and route != "https://":
+            if route and route != "https://" and "apps." in route:
                 print(f"\n  [OK] DSPA Route is ready: {route}")
                 return route
         except Exception:
             pass
+
+        # 2. Search routes for any beginning with ds-pipeline- (excluding metadata route)
+        try:
+            res = run_cmd([
+                "oc", "get", "routes", "-n", namespace,
+                "-o", "jsonpath={range .items[*]}{.metadata.name}{' '}{.spec.host}{'\\n'}{end}"
+            ])
+            for line in res.stdout.splitlines():
+                parts = line.split()
+                if len(parts) >= 2:
+                    name, host = parts[0], parts[1]
+                    if name.startswith("ds-pipeline-") and not name.startswith("ds-pipeline-md-"):
+                        route = f"https://{host}"
+                        print(f"\n  [OK] Discovered DSPA Route '{name}': {route}")
+                        return route
+        except Exception:
+            pass
+
         sys.stdout.write(".")
         sys.stdout.flush()
         time.sleep(3)

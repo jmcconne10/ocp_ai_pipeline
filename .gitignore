@@ -31,7 +31,8 @@ pipeline.yaml
 *.tar.gz
 
 # IDE & OS files
-.vscode/
+.vscode/*
+!.vscode/settings.json
 .idea/
 .DS_Store
 *.swp

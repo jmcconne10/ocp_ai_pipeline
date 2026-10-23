@@ -156,7 +156,7 @@ oc get pods -l app.kubernetes.io/name=data-science-pipelines
 ```
 Retrieve your DSPA route URL:
 ```bash
-oc get route -l app.kubernetes.io/name=data-science-pipelines -o jsonpath='{"https://"}{.items[0].spec.host}{"\n"}'
+oc get route ds-pipeline-dspa -o jsonpath='{"https://"}{.spec.host}{"\n"}'
 ```
 
 ---
@@ -181,7 +181,7 @@ Fill in the values in `.env`:
 # Extract from terminal: oc whoami -t
 OCP_TOKEN=sha256~...
 
-# Extract from terminal: oc get route -l app.kubernetes.io/name=data-science-pipelines -o jsonpath='{"https://"}{.items[0].spec.host}'
+# Extract from terminal: oc get route ds-pipeline-dspa -o jsonpath='{"https://"}{.spec.host}'
 DSPA_HOST=https://ds-pipeline-dspa-your-namespace.apps.yourcluster.com
 
 # Your project namespace
@@ -268,7 +268,7 @@ tkn pipelinerun logs -f -L
 
 ### Check DSPA Route
 ```bash
-oc get route -l app.kubernetes.io/name=data-science-pipelines -o jsonpath='{"https://"}{.items[0].spec.host}{"\n"}'
+oc get route ds-pipeline-dspa -o jsonpath='{"https://"}{.spec.host}{"\n"}'
 ```
 
 ### Extract Your Current Login Token

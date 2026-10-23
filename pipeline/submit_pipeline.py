@@ -31,21 +31,38 @@ def get_ocp_token() -> str:
 
 
 def get_dspa_host() -> str:
-    """Retrieve DSPA Route URL from environment variable or active `oc` namespace."""
+    """Retrieve DSPA Route URL from environment variable or active oc namespace."""
     host = os.getenv("DSPA_HOST", "").strip()
     if host:
         return host
     
+    # 1. Try route named 'ds-pipeline-dspa' directly
     try:
         res = subprocess.run(
-            ["oc", "get", "route", "-l", "app.kubernetes.io/name=data-science-pipelines",
-             "-o", 'jsonpath={"https://"}{.items[0].spec.host}'],
+            ["oc", "get", "route", "ds-pipeline-dspa", "-o", 'jsonpath={"https://"}{.spec.host}'],
             capture_output=True, text=True, check=True
         )
         host = res.stdout.strip()
-        if host and host != "https://":
+        if host and host != "https://" and "apps." in host:
             print(f"Auto-discovered DSPA host from cluster route: {host}")
             return host
+    except Exception:
+        pass
+
+    # 2. Fallback: search routes for any beginning with ds-pipeline- (excluding metadata route)
+    try:
+        res = subprocess.run(
+            ["oc", "get", "routes", "-o", "jsonpath={range .items[*]}{.metadata.name}{' '}{.spec.host}{'\\n'}{end}"],
+            capture_output=True, text=True, check=True
+        )
+        for line in res.stdout.splitlines():
+            parts = line.split()
+            if len(parts) >= 2:
+                name, h = parts[0], parts[1]
+                if name.startswith("ds-pipeline-") and not name.startswith("ds-pipeline-md-"):
+                    discovered = f"https://{h}"
+                    print(f"Auto-discovered DSPA host from route '{name}': {discovered}")
+                    return discovered
     except Exception:
         pass
     
