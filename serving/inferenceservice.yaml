@@ -1,0 +1,25 @@
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: char-completion
+  labels:
+    opendatahub.io/dashboard: "true"
+  annotations:
+    openshift.io/display-name: "Character Completion Service"
+    serving.kserve.io/deploymentMode: "RawDeployment"
+    serving.kserve.io/enable-prometheus-scraping: "true"
+spec:
+  predictor:
+    serviceAccountName: kserve-sa
+    model:
+      modelFormat:
+        name: custom
+      runtime: char-completion-runtime
+      storageUri: "s3://mlpipeline/models/char-completion"
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "256Mi"
+        limits:
+          cpu: "1"
+          memory: "1Gi"

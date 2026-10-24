@@ -1,6 +1,6 @@
 # AI Model Usage & Inference Guide
 
-This guide explains how the **Character-Level Language Model (CharLSTM)** works, how the pipeline trains and exports it, and how to use it locally in Python with [`infer.py`](file://infer.py).
+This guide explains how the **Character-Level Language Model (CharLSTM)** works, how the 3-step pipeline trains, exports, and hosts it, and how to query it via the local CLI ([`infer.py`](file://infer.py)) or the hosted API client ([`client/test_api.py`](file://client/test_api.py)).
 
 ---
 
@@ -18,117 +18,89 @@ When you supply a prefix like `"ope"`:
 
 ---
 
-## 2. Pipeline Execution in OpenShift AI
+## 2. 3-Step Pipeline in OpenShift AI
 
-When the Kubeflow pipeline runs, it executes two connected steps:
+When the Kubeflow pipeline runs, it executes three connected steps:
 
 ```
 ┌─────────────────────────────────┐
 │ Step 1: train-char-lm-op        │
 │                                 │
 │  - Trains CharLSTM on vocabulary│
-│  - Emits scalar metrics:        │
-│      * final_loss               │
-│      * epochs                   │
-│      * vocab_size               │
-│      * train_time_ms            │
-│  - Exports model.pt & vocab.json│
+│  - Emits scalar metrics         │
+│  - Exports to S3 model storage  │
 └────────────────┬────────────────┘
                  │
-                 │ Passes model_artifact (S3 / MinIO)
+                 │ Passes model_artifact
                  ▼
 ┌─────────────────────────────────┐
 │ Step 2: evaluate-completions-op │
 │                                 │
 │  - Ingests model_artifact       │
-│  - Evaluates sample prefixes:   │
-│      * 'ope'  --> 'openshift'   │
-│      * 'kube' --> 'kubeflow'    │
-│      * 'py'   --> 'pytorch'     │
-│      * 'con'  --> 'container'   │
+│  - Evaluates test prefixes      │
 │  - Writes evaluation report     │
+└────────────────┬────────────────┘
+                 │
+                 │ Trigger after training
+                 ▼
+┌─────────────────────────────────┐
+│ Step 3: deploy-kserve-op        │
+│                                 │
+│  - Reconciles KServe Secret     │
+│  - Reconciles ServingRuntime    │
+│  - Reconciles InferenceService  │
+│  - Points to fixed S3 path      │
 └─────────────────────────────────┘
 ```
 
-### Viewing in the OpenShift AI Console:
-* **Metrics Tab:** Click the **Metrics** tab on your pipeline run to see the training loss curve and scalar summary metrics.
-* **Artifacts Tab:** Click on **Artifacts** to see `model_artifact` stored in S3/MinIO, complete with framework metadata (`PyTorch`, `CharLSTM`).
+---
+
+## 3. Querying the Hosted Model API (`client/test_api.py`)
+
+Once deployed by the pipeline, test the endpoint with the client tool:
+
+```bash
+# Auto-discovers the OpenShift route:
+python client/test_api.py --prefix "ope"
+
+# Enterprise KServe v2 protocol:
+python client/test_api.py --kserve --prefix "kube"
+
+# Interactive CLI prompt:
+python client/test_api.py
+```
+
+Or query via curl:
+```bash
+curl -X POST https://<ROUTE_HOST>/complete \
+  -H "Content-Type: application/json" \
+  -d '{"prefix": "con"}'
+```
 
 ---
 
-## 3. Local Inference with `infer.py`
+## 4. Local Inference with `infer.py`
 
-You can interact with the model directly from your local terminal using [`infer.py`](file://infer.py).
+You can also run local completions without sending requests to the cluster:
 
-> 💡 **Automatic Cluster Download:** If `model.pt` is not found locally, `infer.py` will automatically connect to your OpenShift cluster and download the latest trained model artifact from your pipeline run! You can also force a re-download anytime using `--from-cluster`.
-
-### Prerequisites
-Make sure your virtual environment is active:
-```bash
-source .venv/bin/activate
-pip install torch
-```
-
-### Single Word Completion
 ```bash
 python infer.py --prompt "ope"
-```
-Output:
-```text
-=============================================
-Input Prefix  : 'ope'
-Predicted Word: 'openshift'
-=============================================
-```
-
-```bash
-python infer.py --prompt "kube"
-# Predicted Word: 'kubeflow'
-
-python infer.py --prompt "py"
-# Predicted Word: 'pytorch'
-```
-
-### Interactive Autocomplete Mode
-Launch a real-time prompt loop where you can test different prefixes interactively:
-```bash
 python infer.py --interactive
 ```
-Output:
-```text
-============================================================
-🤖 Interactive AI Word Completion
-Type a prefix (e.g. 'ope', 'kube', 'py', 'ten') and press Enter.
-Type 'exit' or press Ctrl+C to quit.
-============================================================
 
-Prompt > ope
-  └── Predicted completion: 'openshift'
-
-Prompt > kube
-  └── Predicted completion: 'kubeflow'
-
-Prompt > con
-  └── Predicted completion: 'container'
-
-Prompt > exit
-Goodbye!
-```
+If local model weights are missing, `infer.py` automatically downloads the latest checkpoint from your OpenShift pipeline MinIO storage!
 
 ---
 
-## 4. Customizing the Training Vocabulary
+## 5. Customizing Training Words
 
-To train the model on your own company or project terms:
-1. Open [`src/model.py`](file://src/model.py).
-2. Modify `DEFAULT_VOCAB_WORDS`:
-   ```python
-   DEFAULT_VOCAB_WORDS = [
-       "openshift",
-       "kubernetes",
-       "yourappname",
-       "datacenter",
-       "microservice",
-   ]
+Customize vocabulary using either:
+1. **File:** Edit [`data/words.txt`](file://data/words.txt).
+2. **CLI argument:**
+   ```bash
+   python pipeline/submit_pipeline.py --words "cloud,openshift,microservice,container"
    ```
-3. Re-run `python pipeline/submit_pipeline.py` to trigger a new pipeline run with your updated vocabulary!
+3. **Local training script:**
+   ```bash
+   python training/train.py --words-file data/words.txt
+   ```

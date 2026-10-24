@@ -25,7 +25,7 @@ def get_ocp_token() -> str:
     except Exception:
         pass
     
-    print("❌ Error: OpenShift authentication token not found.")
+    print("[ERROR] OpenShift authentication token not found.")
     print("Please set OCP_TOKEN in your .env file or log in with `oc login`.")
     sys.exit(1)
 
@@ -66,9 +66,24 @@ def get_dspa_host() -> str:
     except Exception:
         pass
     
-    print("❌ Error: DSPA_HOST not specified.")
+    print("[ERROR] DSPA_HOST not specified.")
     print("Please set DSPA_HOST in your .env file.")
     sys.exit(1)
+
+
+def load_words_from_file_or_cli(words_file: str = None, words_arg: str = None) -> str:
+    if words_arg and words_arg.strip():
+        return words_arg.strip()
+    if words_file and Path(words_file).exists():
+        with open(words_file) as f:
+            lines = [line.strip().lower() for line in f if line.strip() and not line.startswith("#")]
+            return ",".join(lines)
+    default_path = Path("data/words.txt")
+    if default_path.exists():
+        with open(default_path) as f:
+            lines = [line.strip().lower() for line in f if line.strip() and not line.startswith("#")]
+            return ",".join(lines)
+    return ""
 
 
 def main():
@@ -83,8 +98,39 @@ def main():
         "--num-gpus",
         "-g",
         type=int,
-        default=int(os.getenv("NUM_GPUS", "1")),
+        default=int(os.getenv("NUM_GPUS", "0")),
         help="Number of GPUs to request for the workload (set 0 for CPU-only trial clusters)"
+    )
+    parser.add_argument(
+        "--epochs",
+        "-n",
+        type=int,
+        default=150,
+        help="Number of training epochs (default: 150)"
+    )
+    parser.add_argument(
+        "--words",
+        "-w",
+        default=None,
+        help="Custom training words separated by comma or space"
+    )
+    parser.add_argument(
+        "--words-file",
+        default=None,
+        help="Path to text file containing custom training words (default: data/words.txt)"
+    )
+    parser.add_argument(
+        "--deploy",
+        dest="deploy_model",
+        action="store_true",
+        default=True,
+        help="Automatically deploy/update KServe model hosting in Step 3 (default: True)"
+    )
+    parser.add_argument(
+        "--no-deploy",
+        dest="deploy_model",
+        action="store_false",
+        help="Skip automatic KServe deployment in Step 3"
     )
     parser.add_argument(
         "--experiment-name",
@@ -120,7 +166,7 @@ def main():
 
     if not verify_ssl:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        print("⚠️ SSL verification disabled (self-signed certificate mode).")
+        print("[WARNING] SSL verification disabled (self-signed certificate mode).")
 
     print(f"Connecting to OpenShift AI DSPA at: {dspa_host}")
     
@@ -137,13 +183,13 @@ def main():
             print("Registering pipeline template in OpenShift AI UI catalog...")
             p = client.upload_pipeline(
                 pipeline_package_path=str(pipeline_path),
-                pipeline_name="ocp-gpu-hello-world"
+                pipeline_name="ocp-char-completion"
             )
             pipeline_id = p.pipeline_id
-            print(f"✅ Pipeline template registered: {pipeline_id}")
+            print(f"[SUCCESS] Pipeline template registered: {pipeline_id}")
         except Exception:
             try:
-                pipeline_id = client.get_pipeline_id(name="ocp-gpu-hello-world")
+                pipeline_id = client.get_pipeline_id(name="ocp-char-completion")
                 if pipeline_id:
                     import time
                     version_name = f"v-{int(time.time())}"
@@ -152,9 +198,8 @@ def main():
                         pipeline_version_name=version_name,
                         pipeline_id=pipeline_id
                     )
-                    print(f"✅ Uploaded new pipeline version '{version_name}' to catalog.")
-            except Exception as upload_err:
-                # Non-fatal if upload version fails; run can still execute
+                    print(f"[SUCCESS] Uploaded new pipeline version '{version_name}' to catalog.")
+            except Exception:
                 pass
 
         # 2. Ensure experiment exists
@@ -162,14 +207,25 @@ def main():
             experiment = client.create_experiment(name=args.experiment_name)
             experiment_id = experiment.experiment_id
         except Exception:
-            # If already exists, retrieve it
             experiment = client.get_experiment(experiment_name=args.experiment_name)
             experiment_id = experiment.experiment_id
             
-        run_name = args.run_name or f"gpu-run-gpus-{args.num_gpus}"
-        pipeline_params = {"num_gpus": args.num_gpus}
+        words_param = load_words_from_file_or_cli(args.words_file, args.words)
+
+        run_name = args.run_name or f"run-gpus-{args.num_gpus}-deploy-{args.deploy_model}"
+        pipeline_params = {
+            "num_gpus": args.num_gpus,
+            "epochs": args.epochs,
+            "words_list": words_param,
+            "deploy_model": args.deploy_model
+        }
         
-        print(f"Submitting pipeline run '{run_name}' (num_gpus={args.num_gpus})...")
+        print(f"Submitting pipeline run '{run_name}'...")
+        print(f"  - GPUs           : {args.num_gpus}")
+        print(f"  - Epochs         : {args.epochs}")
+        print(f"  - Deploy Model   : {args.deploy_model}")
+        print(f"  - Custom Words   : {len(words_param.split(',')) if words_param else 'Default (10)'}")
+
         run_result = client.create_run_from_pipeline_package(
             pipeline_file=str(pipeline_path),
             arguments=pipeline_params,
@@ -178,7 +234,7 @@ def main():
         )
         
         print("\n" + "=" * 60)
-        print("🚀 Pipeline submitted successfully!")
+        print("[SUCCESS] Pipeline submitted successfully!")
         print("=" * 60)
         print(f"Run ID        : {run_result.run_id}")
         print(f"Experiment ID : {experiment_id}")
@@ -186,7 +242,7 @@ def main():
         print("=" * 60)
 
     except Exception as e:
-        print(f"\n❌ Pipeline submission failed: {e}", file=sys.stderr)
+        print(f"\n[ERROR] Pipeline submission failed: {e}", file=sys.stderr)
         sys.exit(1)
 
 

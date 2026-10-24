@@ -13,7 +13,8 @@ import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Add src to python path for model imports
+# Add training and src to python path for model imports
+sys.path.insert(0, str(Path(__file__).parent / "training"))
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 try:
@@ -21,7 +22,7 @@ try:
     import torch.nn as nn
     from model import CharLSTM, complete_word, train_model, build_vocab
 except ImportError:
-    print("❌ Error: PyTorch is required to run inference.")
+    print("[ERROR] PyTorch is required to run inference.")
     print("Install dependencies with: pip install torch")
     sys.exit(1)
 

@@ -1,0 +1,31 @@
+apiVersion: serving.kserve.io/v1alpha1
+kind: ServingRuntime
+metadata:
+  name: char-completion-runtime
+  labels:
+    opendatahub.io/dashboard: "true"
+  annotations:
+    openshift.io/display-name: "Character Completion Serving Runtime"
+spec:
+  supportedModelFormats:
+    - name: custom
+      version: "1"
+      autoSelect: true
+    - name: pytorch
+      version: "2"
+      autoSelect: true
+  multiModel: false
+  protocolVersions:
+    - v2
+    - v1
+  containers:
+    - name: kserve-container
+      image: image-registry.openshift-image-registry.svc:5000/joe-mcconnell10-dev/char-completion-serving:latest
+      env:
+        - name: PORT
+          value: "8080"
+        - name: MODEL_DIR
+          value: "/mnt/models"
+      ports:
+        - containerPort: 8080
+          protocol: TCP
